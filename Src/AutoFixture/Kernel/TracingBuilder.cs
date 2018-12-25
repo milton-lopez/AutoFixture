@@ -10,6 +10,7 @@ namespace AutoFixture.Kernel
     {
         private IRequestSpecification filter;
         private int depth;
+        private Action ifSpecimenCreated;
 
         /// <summary>
         /// Raised when a specimen is requested.
@@ -30,6 +31,7 @@ namespace AutoFixture.Kernel
         {
             this.Builder = builder ?? throw new ArgumentNullException(nameof(builder));
             this.filter = new TrueRequestSpecification();
+            this.ifSpecimenCreated = () => { };
         }
 
         /// <summary>
@@ -78,22 +80,15 @@ namespace AutoFixture.Kernel
                 this.OnSpecimenRequested(new RequestTraceEventArgs(request, ++this.depth));
             }
 
-            bool specimenWasCreated = false;
-            object specimen = null;
             try
             {
-                specimen = this.Builder.Create(request, context);
-                specimenWasCreated = true;
-                return specimen;
+                return this.TryCreateSpecimen(request, context);
             }
             finally
             {
                 if (isFilterSatisfied)
                 {
-                    if (specimenWasCreated)
-                    {
-                        this.OnSpecimenCreated(new SpecimenCreatedEventArgs(request, specimen, this.depth));
-                    }
+                    this.ifSpecimenCreated();
                     this.depth--;
                 }
             }
@@ -115,6 +110,18 @@ namespace AutoFixture.Kernel
         protected virtual void OnSpecimenRequested(RequestTraceEventArgs e)
         {
             this.SpecimenRequested?.Invoke(this, e);
+        }
+
+        private object TryCreateSpecimen(object request, ISpecimenContext context)
+        {
+            var specimen = this.Builder.Create(request, context);
+
+            this.ifSpecimenCreated = () =>
+            {
+                this.OnSpecimenCreated(new SpecimenCreatedEventArgs(request, specimen, this.depth));
+            };
+
+            return specimen;
         }
     }
 }
